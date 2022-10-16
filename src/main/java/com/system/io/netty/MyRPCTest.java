@@ -22,6 +22,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
@@ -44,6 +45,12 @@ public class MyRPCTest {
 
     @Test
     public void startServer() {
+        MyCar car = new MyCar();
+        MyFly fly = new MyFly();
+        Dispatcher dis = new Dispatcher();
+        dis.register(Car.class.getName(), car);
+        dis.register(Fly.class.getName(), fly);
+
         NioEventLoopGroup boss = new NioEventLoopGroup(20);
         NioEventLoopGroup worker = boss;
 
@@ -56,7 +63,7 @@ public class MyRPCTest {
                         System.out.println("server accept client port: " + ch.remoteAddress().getPort());
                         ChannelPipeline p = ch.pipeline();
                         p.addLast(new ServerDecode());
-                        p.addLast(new ServerRequestHandler());
+                        p.addLast(new ServerRequestHandler(dis));
                     }
                 }).bind(new InetSocketAddress("localhost", 9090));
 
@@ -166,6 +173,18 @@ public class MyRPCTest {
     }
 }
 
+class Dispatcher {
+    public static ConcurrentHashMap<String, Object> invokeMap = new ConcurrentHashMap<>();
+
+    public void register(String k, Object obj) {
+        invokeMap.put(k, obj);
+    }
+
+    public Object get(String k) {
+        return invokeMap.get(k);
+    }
+}
+
 class ServerDecode extends ByteToMessageDecoder {
 
     /**
@@ -214,6 +233,12 @@ class ServerDecode extends ByteToMessageDecoder {
 }
 
 class ServerRequestHandler extends ChannelInboundHandlerAdapter {
+    Dispatcher dis;
+
+    public ServerRequestHandler(Dispatcher dis) {
+        this.dis = dis;
+    }
+
     //provider
 
     /**
@@ -244,11 +269,27 @@ class ServerRequestHandler extends ChannelInboundHandlerAdapter {
         //3.自己创建线程池
         //ctx.executor().execute(() -> {       //拿自己的线程池去执行
         ctx.executor().parent().next().execute(() -> {   //从线程池的父亲eventLoopGroup，next
-            String execThreadName = Thread.currentThread().getName();
+            String serviceName = requestPkg.content.getName();
+            String method = requestPkg.content.getMethodName();
+            Object c = dis.get(serviceName);
+            Class<?> clazz = c.getClass();
+            Object res = null;
+            try {
+                Method m = clazz.getMethod(method, requestPkg.content.parameterTypes);
+                res = m.invoke(c, requestPkg.content.args);
+            } catch (NoSuchMethodException e) {
+                e.printStackTrace();
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            } catch (InvocationTargetException e) {
+                e.printStackTrace();
+            }
+
+
+            //String execThreadName = Thread.currentThread().getName();
             MyContent content = new MyContent();
-            String s = "io thread: " + ioThreadName + "exec thread: " + execThreadName + "from args: " + requestPkg.content.args[0];
-            System.out.println(s);
-            content.setRes(s);
+            //String s = "io thread: " + ioThreadName + "exec thread: " + execThreadName + "from args: " + requestPkg.content.args[0];
+            content.setRes((String) res);
             byte[] contentByte = SerDerUtil.serialize(content);
 
             MyHeader resHeader = new MyHeader();
@@ -488,6 +529,23 @@ interface Car {
 
 interface Fly {
     void xxoo(String msg);
+}
+
+class MyCar implements Car {
+
+    @Override
+    public String ooxx(String msg) {
+        System.out.println("server, get client arg :" + msg);
+        return "server res " + msg;
+    }
+}
+
+class MyFly implements Fly {
+
+    @Override
+    public void xxoo(String msg) {
+        System.out.println("server, get client arg :" + msg);
+    }
 }
 
 
