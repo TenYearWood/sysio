@@ -7,4 +7,6 @@ package com.system.rpcdemo.rpc.service;
  */
 public interface Car {
     String ooxx(String s);
+
+    Person oxox(String name, Integer age);
 }

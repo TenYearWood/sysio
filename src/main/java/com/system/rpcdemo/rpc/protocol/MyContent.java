@@ -20,7 +20,7 @@ public class MyContent implements Serializable {
         return res;
     }
 
-    public void setRes(String res) {
+    public void setRes(Object res) {
         this.res = res;
     }
 

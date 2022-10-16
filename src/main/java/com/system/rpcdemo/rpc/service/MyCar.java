@@ -12,4 +12,12 @@ public class MyCar implements Car {
         System.out.println("server, get client arg :" + msg);
         return "server res " + msg;
     }
+
+    @Override
+    public Person oxox(String name, Integer age) {
+        Person p = new Person();
+        p.setName(name);
+        p.setAge(age);
+        return p;
+    }
 }
